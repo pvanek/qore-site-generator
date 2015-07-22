@@ -1,0 +1,177 @@
+#!/usr/bin/env qore
+%new-style
+%exec-class Main
+
+%requires WebUtil
+%requires markdown
+
+
+const OPTIONS = (
+        "help"      : "help,h",
+        "basehref"  : "base,b",
+        "offline"   : "offline,o",
+    );
+
+const ERROR = "QSG-ERROR";
+
+
+sub usage(int exitcode = 0) {
+    printf("%s [<options>] <source_dir> <target_dir>
+
+source_dir: a directory where source files are located
+target_dir: a directory where the final files will be placed.
+            Note: All content in the target_dir will be removed!
+
+Options:
+ -b, --base     Use given base href value
+ -x, --offline  Render website for offline browsing. Disallows --base
+ -h, --help     Prints this help string
+", get_script_name());
+
+    exit(exitcode);
+}
+
+class Main
+{
+    private {
+        Dir m_src();
+        Dir m_tgt();
+
+        WebUtil::TemplateFileManager m_template(TextTemplateBase::DefaultProgramOptions | Qore::PO_NEW_STYLE);
+
+        hash m_opts;
+
+        bool m_hasIndex = False;
+        list m_dirs;
+        hash m_menu;
+    }
+
+    constructor() {
+        GetOpt go(OPTIONS);
+        m_opts = go.parse(\ARGV);
+
+        if (m_opts.help)
+            usage(0);
+
+        if (!m_opts.basehref)
+            m_opts.basehref = "/";
+
+        if (ARGV.size() != 2)
+            usage(1);
+
+        m_src.chdir(shift ARGV);
+        m_tgt.chdir(shift ARGV);
+
+        checkDir(m_src);
+        checkDir(m_tgt);
+
+        # TODO/FIXME: proper qore solution, or integrate it with git
+        system(sprintf("rm -rf %s/*", m_tgt.path()));
+        # TODO/FIXME!
+
+        m_dirs = m_src.listDirs();
+        # compose menu
+        # TODO/FIXME: menu ordering?
+        foreach string d in (m_dirs) {
+            if (d == "index")
+                m_menu.index = m_opts.offline ? "../index.html" : "/";
+            else
+                m_menu{d} = m_opts.offline ? "../" + d + "/index.html" : "/" + d + "/";
+        }
+        # pages
+        foreach string d in (m_dirs) {
+            renderPage(d);
+        }
+    }
+
+    private checkDir(Dir d) {
+        printf("Checking: %s\n", d.path());
+        if (!d.exists())
+            throw ERROR, sprintf("Directory %s does not exist", d.path());
+        if (!is_dir(d.path()))
+            throw ERROR, sprintf("Path %s is not directory", d.path());
+        if (!is_readable(d.path()))
+            throw ERROR, sprintf("Directory %s is not readable", d.path());
+        if (!is_writable(d.path()))
+            throw ERROR, sprintf("Directory %s is not writable", d.path());
+    }
+
+
+    private renderPage(string src_subdir) {
+        printf("Rendering page: %s\n", src_subdir);
+
+        # TODO/FIXME: configure these values
+        hash cx = (
+                "base" : m_opts.basehref,
+                "title" : "Test Website",
+                "subtitle" : src_subdir,
+                "menu" : m_menu,
+                "page_content" : pageContent(src_subdir),
+            );
+
+        if (m_opts.offline) {
+            delete cx.base;
+
+            # TODO/FIXME: index.html hack!
+            HashIterator it(m_menu);
+            while (it.next()) {
+                string key = it.getKey();
+                string val = it.getValue();
+                if (src_subdir == "index")
+                    val = replace(val, "../", "./");
+                cx.menu{key} = val;
+            }
+        }
+
+        #printf("    rendering: %s -> %s\n", m_src.path() + "/template_index.tmpl", m_tgt.path() + "/" + src_subdir + "/index.html");
+        hash ret = m_template.render("template_index.tmpl", m_src.path() + "/template_index.tmpl", now(), cx);
+
+        # TODO/FIXME: index goes to the root. Is it good?
+        string tgt_subdir = src_subdir;
+        if (src_subdir == "index")
+            tgt_subdir = "";
+        else
+            m_tgt.mkdir(src_subdir);
+
+        File f();
+        f.open2(m_tgt.path() + "/" + tgt_subdir + "/index.html", O_CREAT | O_TRUNC | O_WRONLY, 0644);
+        f.write(ret.body);
+
+        # copy static files to the destination
+        Dir d();
+        d.chdir(m_src.path() + "/" + src_subdir);
+        list files = d.listFiles();
+
+        ListIterator it(files);
+        while (it.next()) {
+            if (it.getValue() == "index.html" || it.getValue() == "index.md")
+                continue;
+            # TODO/FIXME: proper Qore solution
+            printf("    copyting %s\n", it.getValue());
+            system(sprintf("cp %s %s", d.path() + "/" + it.getValue(), m_tgt.path() + "/" + tgt_subdir + "/" + it.getValue()));
+        }
+
+    }
+
+    private string pageContent(string src_subdir) {
+        Dir d();
+        d.chdir(m_src.path() + "/" + src_subdir);
+        list files = d.listFiles();
+        #printf("    searching for index file: %s (%y)\n", d.path(), files);
+
+        if (inlist("index.html", files)) {
+            ReadOnlyFile f(d.path() + "/index.html");
+            return f.read(-1);
+        }
+        else if (inlist("index.md", files)) {
+            ReadOnlyFile f(d.path() + "/index.md");
+            string md = f.read(-1);
+            return markdown_convert(md);
+        }
+        else
+            throw ERROR, sprintf("No index file found in: %s", d.path());
+    }
+
+
+} # class Main
+

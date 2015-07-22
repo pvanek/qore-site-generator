@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        {% if (ctx.base) { %}
+        <base href="{{ ctx.base }}" target="_self">
+        {% } %}
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{{ ctx.title }}</title>
+    </head>
+    <body>
+    <div class="container">
+
+        <h1>{{ ctx.title }}<small>{{ ctx.subtitle}}</small></h1>
+
+        <b>Menu:</b>
+        <ul> 
+            {% HashIterator it(ctx.menu);
+            while (it.next()) { %}
+            <li><a href="{{ it.getValue() }}">{{ it.getKey() }}</a></li>
+            {% } %}
+        </ul>
+
+        {{ ctx.page_content }}
+
+    </div>
+
+    <div class="footer">
+        A footer content...
+    </div>
+
+    </body>
+</html>
+
