@@ -8,12 +8,13 @@
         <title>{{ ctx.title }}</title>
     </head>
     <body>
+    {{ ctx.include('snippets/header.shtml') }}
     <div class="container">
 
         <h1>{{ ctx.title }}<small>{{ ctx.subtitle}}</small></h1>
 
         <b>Menu:</b>
-        <ul> 
+        <ul>
             {% HashIterator it(ctx.menu);
             while (it.next()) { %}
             <li><a href="{{ it.getValue() }}">{{ it.getKey() }}</a></li>
@@ -30,4 +31,3 @@
 
     </body>
 </html>
-

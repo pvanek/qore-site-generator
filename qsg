@@ -44,6 +44,9 @@ class Main
         bool m_hasIndex = False;
         list m_dirs;
         hash m_menu;
+
+        # TODO/FIXME: configure these values
+        hash cx;
     }
 
     constructor() {
@@ -69,6 +72,12 @@ class Main
         system(sprintf("rm -rf %s/*", m_tgt.path()));
         # TODO/FIXME!
 
+        cx = (
+            "base" : m_opts.basehref,
+            "menu" : m_menu,
+            "include": \include()
+        );
+
         m_dirs = m_src.listDirs();
         # compose menu
         # TODO/FIXME: menu ordering?
@@ -78,6 +87,7 @@ class Main
             else
                 m_menu{d} = m_opts.offline ? "../" + d + "/index.html" : "/" + d + "/";
         }
+
         # pages
         foreach string d in (m_dirs) {
             renderPage(d);
@@ -100,17 +110,14 @@ class Main
     private renderPage(string src_subdir) {
         printf("Rendering page: %s\n", src_subdir);
 
-        # TODO/FIXME: configure these values
-        hash cx = (
-                "base" : m_opts.basehref,
-                "title" : "Test Website",
-                "subtitle" : src_subdir,
-                "menu" : m_menu,
-                "page_content" : pageContent(src_subdir),
-            );
+        hash cxx = cx + (
+          "title" : "Test Website",
+          "subtitle" : src_subdir,
+          "page_content" : pageContent(src_subdir)
+        );
 
         if (m_opts.offline) {
-            delete cx.base;
+            delete cxx.base;
 
             # TODO/FIXME: index.html hack!
             HashIterator it(m_menu);
@@ -119,12 +126,12 @@ class Main
                 string val = it.getValue();
                 if (src_subdir == "index")
                     val = replace(val, "../", "./");
-                cx.menu{key} = val;
+                cxx.menu{key} = val;
             }
         }
 
         #printf("    rendering: %s -> %s\n", m_src.path() + "/template_index.tmpl", m_tgt.path() + "/" + src_subdir + "/index.html");
-        hash ret = m_template.render("template_index.tmpl", m_src.path() + "/template_index.tmpl", now(), cx);
+        hash ret = m_template.render("template_index.tmpl", m_src.path() + "/template_index.tmpl", now(), cxx);
 
         # TODO/FIXME: index goes to the root. Is it good?
         string tgt_subdir = src_subdir;
@@ -153,7 +160,14 @@ class Main
 
     }
 
+    private string include(string tmpl) {
+      WebUtil::TemplateFileManager tpl(TextTemplateBase::DefaultProgramOptions | Qore::PO_NEW_STYLE);
+      hash ret = tpl.render(tmpl, m_src.path() + "/" + tmpl, now(), cx);
+      return ret.body;
+    }
+
     private string pageContent(string src_subdir) {
+      if (src_subdir != 'snippets') {
         Dir d();
         d.chdir(m_src.path() + "/" + src_subdir);
         list files = d.listFiles();
@@ -170,8 +184,10 @@ class Main
         }
         else
             throw ERROR, sprintf("No index file found in: %s", d.path());
+      }
+      else
+        return '';
     }
 
 
 } # class Main
-
